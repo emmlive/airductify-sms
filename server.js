@@ -1,8 +1,20 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const twilio = require("twilio");
+const cors = require("cors");
 
 const app = express();
+
+// ✅ CORS FIX (CRITICAL for your website)
+app.use(cors({
+  origin: [
+    "https://airductify.com",
+    "https://www.airductify.com"
+  ],
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
 app.use(bodyParser.json());
 
 // ✅ Initialize Twilio client safely
@@ -26,6 +38,7 @@ app.get("/send-sms", async (req, res) => {
     });
 
     console.log("Test SMS SID:", message.sid);
+
     res.send("✅ SMS sent: " + message.sid);
   } catch (error) {
     console.error("❌ Test SMS Error:", error);
@@ -38,9 +51,12 @@ app.post("/lead", async (req, res) => {
   try {
     const { name, phone, service } = req.body;
 
-    // ✅ Basic validation
+    // ✅ Validation
     if (!name || !phone || !service) {
-      return res.status(400).send("Missing required fields");
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields"
+      });
     }
 
     const message = await client.messages.create({
@@ -62,12 +78,16 @@ Service: ${service}`,
 
   } catch (error) {
     console.error("❌ Lead SMS Error:", error);
+
     res.status(500).json({
       success: false,
-      error: "Error sending SMS",
+      error: error.message || "Error sending SMS",
     });
   }
 });
+
+// 🚀 OPTIONAL: Handle preflight explicitly (extra safety)
+app.options("*", cors());
 
 // 🚀 Start server
 const PORT = process.env.PORT || 3000;
