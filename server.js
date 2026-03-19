@@ -4,42 +4,64 @@ const twilio = require("twilio");
 
 const app = express();
 
-// ✅ CRITICAL: MUST BE FIRST
-app.use(cors({
-  origin: "*", // TEMPORARY to confirm fix
-}));
+// ✅ CORS (keep open for now)
+app.use(cors({ origin: "*" }));
 
 app.use(express.json());
 
-// ✅ Twilio
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+// ✅ Validate ENV before using Twilio
+const {
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_NUMBER,
+  YOUR_PHONE_NUMBER
+} = process.env;
 
-// Health
+if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+  console.error("❌ Missing Twilio credentials");
+}
+
+let client = null;
+
+try {
+  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+    client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  }
+} catch (err) {
+  console.error("❌ Twilio init failed:", err.message);
+}
+
+// Health check
 app.get("/", (req, res) => {
-  res.send("Airductify SMS Server Running 🚀");
+  res.send("🚀 Airductify SMS Server Running");
 });
 
-// Test
+// Test route
 app.get("/send-sms", async (req, res) => {
+  if (!client) {
+    return res.status(500).send("Twilio not initialized");
+  }
+
   try {
     const message = await client.messages.create({
-      body: "🔥 Airductify test SMS working!",
-      from: process.env.TWILIO_NUMBER,
-      to: process.env.YOUR_PHONE_NUMBER,
+      body: "🔥 Test SMS working!",
+      from: TWILIO_NUMBER,
+      to: YOUR_PHONE_NUMBER,
     });
 
     res.send("✅ SMS sent: " + message.sid);
   } catch (err) {
     console.error(err);
-    res.status(500).send("Error");
+    res.status(500).send(err.message);
   }
 });
 
 // Lead route
 app.post("/lead", async (req, res) => {
+  if (!client) {
+    return res.status(500).json({ success: false, error: "Twilio not ready" });
+  }
+
   try {
     const { name, phone, service } = req.body;
 
@@ -52,22 +74,24 @@ app.post("/lead", async (req, res) => {
 Name: ${name}
 Phone: ${phone}
 Service: ${service}`,
-      from: process.env.TWILIO_NUMBER,
-      to: process.env.YOUR_PHONE_NUMBER,
+      from: TWILIO_NUMBER,
+      to: YOUR_PHONE_NUMBER,
     });
 
-    res.json({
-      success: true,
-      sid: message.sid
-    });
+    res.json({ success: true, sid: message.sid });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false });
+    console.error("❌ SMS error:", err.message);
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Server running on", PORT);
+  console.log("🔥 Server running on port", PORT);
 });
