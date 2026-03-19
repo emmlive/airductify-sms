@@ -1,34 +1,28 @@
 const express = require("express");
-const bodyParser = require("body-parser");
-const twilio = require("twilio");
 const cors = require("cors");
+const twilio = require("twilio");
 
 const app = express();
 
-// ✅ CORS FIX (CRITICAL for your website)
+// ✅ CRITICAL: MUST BE FIRST
 app.use(cors({
-  origin: [
-    "https://airductify.com",
-    "https://www.airductify.com"
-  ],
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
+  origin: "*", // TEMPORARY to confirm fix
 }));
 
-app.use(bodyParser.json());
+app.use(express.json());
 
-// ✅ Initialize Twilio client safely
+// ✅ Twilio
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
 
-// 🔍 Health check
+// Health
 app.get("/", (req, res) => {
   res.send("Airductify SMS Server Running 🚀");
 });
 
-// 🔥 TEST ROUTE (Browser-friendly)
+// Test
 app.get("/send-sms", async (req, res) => {
   try {
     const message = await client.messages.create({
@@ -37,26 +31,20 @@ app.get("/send-sms", async (req, res) => {
       to: process.env.YOUR_PHONE_NUMBER,
     });
 
-    console.log("Test SMS SID:", message.sid);
-
     res.send("✅ SMS sent: " + message.sid);
-  } catch (error) {
-    console.error("❌ Test SMS Error:", error);
-    res.status(500).send("Error sending SMS");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
-// 🚀 LEAD CAPTURE ROUTE (used by website)
+// Lead route
 app.post("/lead", async (req, res) => {
   try {
     const { name, phone, service } = req.body;
 
-    // ✅ Validation
     if (!name || !phone || !service) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing required fields"
-      });
+      return res.status(400).json({ success: false });
     }
 
     const message = await client.messages.create({
@@ -68,29 +56,18 @@ Service: ${service}`,
       to: process.env.YOUR_PHONE_NUMBER,
     });
 
-    console.log("📩 Lead SMS SID:", message.sid);
-
-    res.status(200).json({
+    res.json({
       success: true,
-      message: "SMS sent",
-      sid: message.sid,
+      sid: message.sid
     });
 
-  } catch (error) {
-    console.error("❌ Lead SMS Error:", error);
-
-    res.status(500).json({
-      success: false,
-      error: error.message || "Error sending SMS",
-    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 });
 
-// 🚀 OPTIONAL: Handle preflight explicitly (extra safety)
-app.options("*", cors());
-
-// 🚀 Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🔥 Server running on port ${PORT}`);
+  console.log("Server running on", PORT);
 });
