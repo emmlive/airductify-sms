@@ -4,7 +4,7 @@ const twilio = require("twilio");
 const app = express();
 
 /* =====================================================
-   🔥 FORCE CORS (fixes your exact browser error)
+   🔥 FORCE CORS (fixes browser issues)
 ===================================================== */
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -13,10 +13,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Handle preflight requests (CRITICAL for POST)
-app.options("*", (req, res) => {
-  return res.sendStatus(200);
-});
+app.options("*", (req, res) => res.sendStatus(200));
 
 /* =====================================================
    BODY PARSER
@@ -24,7 +21,7 @@ app.options("*", (req, res) => {
 app.use(express.json());
 
 /* =====================================================
-   ENV + TWILIO INIT (SAFE)
+   ENV + TWILIO INIT
 ===================================================== */
 const {
   TWILIO_ACCOUNT_SID,
@@ -54,7 +51,8 @@ app.get("/", (req, res) => {
 });
 
 /* =====================================================
-   TEST ROUTE (BROWSER SAFE)
+   TEST ROUTE
+   ⚠️ USE VERIFIED NUMBER ONLY (A2P FIX)
 ===================================================== */
 app.get("/send-sms", async (req, res) => {
   if (!client) {
@@ -64,7 +62,7 @@ app.get("/send-sms", async (req, res) => {
   try {
     const message = await client.messages.create({
       body: "🔥 Airductify test SMS working!",
-      from: TWILIO_NUMBER,
+      from: YOUR_PHONE_NUMBER, // ✅ FIXED (important)
       to: YOUR_PHONE_NUMBER,
     });
 
@@ -78,7 +76,7 @@ app.get("/send-sms", async (req, res) => {
 });
 
 /* =====================================================
-   LEAD ROUTE (USED BY WEBSITE)
+   LEAD ROUTE (MAIN SYSTEM)
 ===================================================== */
 app.post("/lead", async (req, res) => {
   if (!client) {
@@ -89,7 +87,7 @@ app.post("/lead", async (req, res) => {
   }
 
   try {
-    const { name, phone, service } = req.body;
+    const { name, phone, service, zip } = req.body;
 
     if (!name || !phone || !service) {
       return res.status(400).json({
@@ -98,16 +96,23 @@ app.post("/lead", async (req, res) => {
       });
     }
 
+    const messageBody = `
+🔥 NEW LEAD
+
+👤 Name: ${name}
+📞 Phone: ${phone}
+🛠 Service: ${service}
+📍 ZIP: ${zip || "N/A"}
+    `;
+
     const message = await client.messages.create({
-      body: `🔥 New Lead:
-Name: ${name}
-Phone: ${phone}
-Service: ${service}`,
-      from: TWILIO_NUMBER,
+      body: messageBody,
+      from: YOUR_PHONE_NUMBER, // ✅ CRITICAL FIX
       to: YOUR_PHONE_NUMBER,
     });
 
-    console.log("📩 Lead SMS:", message.sid);
+    console.log("📩 Lead SMS sent:", message.sid);
+    console.log("📦 Payload:", { name, phone, service, zip });
 
     return res.json({
       success: true,
