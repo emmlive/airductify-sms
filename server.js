@@ -26,9 +26,11 @@ app.use(express.json());
 const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
-  TWILIO_NUMBER,       // 👉 your Twilio number (814...)
-  YOUR_PHONE_NUMBER    // 👉 your personal verified number (815...)
+  YOUR_PHONE_NUMBER // your personal number (receives leads)
 } = process.env;
+
+/* 🔥 USE MESSAGING SERVICE (NOT FROM NUMBER) */
+const MESSAGING_SERVICE_SID = "MG189133f6aa922820e0d586b9d2ae19e7";
 
 let client = null;
 
@@ -40,15 +42,13 @@ try {
 }
 
 /* =====================================================
-   HELPER: FORMAT PHONE (VERY IMPORTANT)
+   HELPER: FORMAT PHONE
 ===================================================== */
 function formatPhone(phone) {
   if (!phone) return null;
 
-  // remove spaces, dashes, etc.
   let cleaned = phone.replace(/\D/g, "");
 
-  // if 10 digits → add US country code
   if (cleaned.length === 10) {
     cleaned = "1" + cleaned;
   }
@@ -69,20 +69,20 @@ app.get("/", (req, res) => {
 app.get("/send-sms", async (req, res) => {
   try {
     const message = await client.messages.create({
-      body: "🔥 Test SMS working!",
-      from: TWILIO_NUMBER,
+      body: "🔥 Airductify test SMS working!",
+      messagingServiceSid: MESSAGING_SERVICE_SID,
       to: YOUR_PHONE_NUMBER,
     });
 
     res.send("✅ SMS sent: " + message.sid);
   } catch (err) {
-    console.error(err.message);
+    console.error("❌ Test SMS error:", err.message);
     res.status(500).send(err.message);
   }
 });
 
 /* =====================================================
-   LEAD ROUTE (MAIN FIX HERE)
+   LEAD ROUTE
 ===================================================== */
 app.post("/lead", async (req, res) => {
   try {
@@ -107,30 +107,28 @@ app.post("/lead", async (req, res) => {
     `;
 
     /* ==========================================
-       🔥 SEND SMS TO YOU (NOT TO ITSELF)
+       📩 SEND LEAD TO YOU
     ========================================== */
-
-    const message = await client.messages.create({
+    const leadMessage = await client.messages.create({
       body: messageBody,
-      from: TWILIO_NUMBER,        // ✅ ALWAYS Twilio number
-      to: YOUR_PHONE_NUMBER,      // ✅ YOU RECEIVE LEAD
+      messagingServiceSid: MESSAGING_SERVICE_SID,
+      to: YOUR_PHONE_NUMBER,
     });
 
     /* ==========================================
-       🔁 OPTIONAL: CONFIRMATION TO USER
+       🔁 CONFIRMATION TO CUSTOMER
     ========================================== */
-
     await client.messages.create({
-      body: "✅ Thanks! Airductify received your request. We'll contact you shortly.",
-      from: TWILIO_NUMBER,
-      to: formattedPhone,         // ✅ USER GETS CONFIRMATION
+      body: "✅ Airductify: We received your request. We'll contact you shortly.",
+      messagingServiceSid: MESSAGING_SERVICE_SID,
+      to: formattedPhone,
     });
 
-    console.log("📩 Lead SMS sent:", message.sid);
+    console.log("📩 Lead SMS:", leadMessage.sid);
 
     return res.json({
       success: true,
-      sid: message.sid,
+      sid: leadMessage.sid,
     });
 
   } catch (err) {
