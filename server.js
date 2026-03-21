@@ -4,7 +4,7 @@ const twilio = require("twilio");
 const app = express();
 
 /* =====================================================
-   🔥 FORCE CORS (fixes browser issues)
+   🔥 CORS FIX
 ===================================================== */
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -26,21 +26,34 @@ app.use(express.json());
 const {
   TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN,
-  TWILIO_NUMBER,
-  YOUR_PHONE_NUMBER,
+  TWILIO_NUMBER,       // 👉 your Twilio number (814...)
+  YOUR_PHONE_NUMBER    // 👉 your personal verified number (815...)
 } = process.env;
 
 let client = null;
 
-if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-  console.error("❌ Missing Twilio credentials");
-} else {
-  try {
-    client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    console.log("✅ Twilio initialized");
-  } catch (err) {
-    console.error("❌ Twilio init failed:", err.message);
+try {
+  client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  console.log("✅ Twilio initialized");
+} catch (err) {
+  console.error("❌ Twilio init failed:", err.message);
+}
+
+/* =====================================================
+   HELPER: FORMAT PHONE (VERY IMPORTANT)
+===================================================== */
+function formatPhone(phone) {
+  if (!phone) return null;
+
+  // remove spaces, dashes, etc.
+  let cleaned = phone.replace(/\D/g, "");
+
+  // if 10 digits → add US country code
+  if (cleaned.length === 10) {
+    cleaned = "1" + cleaned;
   }
+
+  return "+" + cleaned;
 }
 
 /* =====================================================
@@ -52,40 +65,26 @@ app.get("/", (req, res) => {
 
 /* =====================================================
    TEST ROUTE
-   ⚠️ USE VERIFIED NUMBER ONLY (A2P FIX)
 ===================================================== */
 app.get("/send-sms", async (req, res) => {
-  if (!client) {
-    return res.status(500).send("❌ Twilio not initialized");
-  }
-
   try {
     const message = await client.messages.create({
-      body: "🔥 Airductify test SMS working!",
-      from: YOUR_PHONE_NUMBER, // ✅ FIXED (important)
+      body: "🔥 Test SMS working!",
+      from: TWILIO_NUMBER,
       to: YOUR_PHONE_NUMBER,
     });
 
-    console.log("✅ Test SMS:", message.sid);
-
     res.send("✅ SMS sent: " + message.sid);
   } catch (err) {
-    console.error("❌ Test SMS Error:", err.message);
+    console.error(err.message);
     res.status(500).send(err.message);
   }
 });
 
 /* =====================================================
-   LEAD ROUTE (MAIN SYSTEM)
+   LEAD ROUTE (MAIN FIX HERE)
 ===================================================== */
 app.post("/lead", async (req, res) => {
-  if (!client) {
-    return res.status(500).json({
-      success: false,
-      error: "Twilio not initialized",
-    });
-  }
-
   try {
     const { name, phone, service, zip } = req.body;
 
@@ -96,23 +95,38 @@ app.post("/lead", async (req, res) => {
       });
     }
 
+    const formattedPhone = formatPhone(phone);
+
     const messageBody = `
 🔥 NEW LEAD
 
 👤 Name: ${name}
-📞 Phone: ${phone}
+📞 Phone: ${formattedPhone}
 🛠 Service: ${service}
 📍 ZIP: ${zip || "N/A"}
     `;
 
+    /* ==========================================
+       🔥 SEND SMS TO YOU (NOT TO ITSELF)
+    ========================================== */
+
     const message = await client.messages.create({
       body: messageBody,
-      from: YOUR_PHONE_NUMBER, // ✅ CRITICAL FIX
-      to: YOUR_PHONE_NUMBER,
+      from: TWILIO_NUMBER,        // ✅ ALWAYS Twilio number
+      to: YOUR_PHONE_NUMBER,      // ✅ YOU RECEIVE LEAD
+    });
+
+    /* ==========================================
+       🔁 OPTIONAL: CONFIRMATION TO USER
+    ========================================== */
+
+    await client.messages.create({
+      body: "✅ Thanks! Airductify received your request. We'll contact you shortly.",
+      from: TWILIO_NUMBER,
+      to: formattedPhone,         // ✅ USER GETS CONFIRMATION
     });
 
     console.log("📩 Lead SMS sent:", message.sid);
-    console.log("📦 Payload:", { name, phone, service, zip });
 
     return res.json({
       success: true,
@@ -120,7 +134,7 @@ app.post("/lead", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Lead SMS Error:", err.message);
+    console.error("❌ SMS ERROR:", err.message);
 
     return res.status(500).json({
       success: false,
